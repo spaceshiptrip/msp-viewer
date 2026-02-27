@@ -82,8 +82,6 @@ export function parseMsProjectXml(xmlString) {
 
 function parseTask(el) {
   const uid = getText(el, 'UID');
-  if (uid === '0') return null; // Skip summary/root task with UID 0
-
   const name = getText(el, 'Name');
   if (!name) return null;
 
