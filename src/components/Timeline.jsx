@@ -116,13 +116,34 @@ export default function Timeline({ project, fileName, onReset }) {
   }, [tasks, collapsed, search]);
 
   const sortedVisibleTasks = useMemo(() => {
-    if (sortBy === 'default') return visibleTasks;
-    return [...visibleTasks].sort((a, b) => {
-      const da = a.start ? new Date(a.start).getTime() : Infinity;
-      const db = b.start ? new Date(b.start).getTime() : Infinity;
-      return da - db;
-    });
-  }, [visibleTasks, sortBy]);
+    if (sortBy === 'date') {
+      return [...visibleTasks].sort((a, b) => {
+        const da = a.start ? new Date(a.start).getTime() : Infinity;
+        const db = b.start ? new Date(b.start).getTime() : Infinity;
+        return da - db;
+      });
+    }
+    if (sortBy === 'original') {
+      // Re-filter using the original XML task array order, ignoring hierarchy walk
+      const hidden = new Set();
+      if (collapsed.size > 0) {
+        // Still respect collapse: hide children of collapsed summaries
+        tasks.forEach(task => {
+          if (task.isSummary && collapsed.has(task.uid)) {
+            const hide = (uid) => tasks.filter(t => t.parentUid === uid).forEach(child => { hidden.add(child.uid); hide(child.uid); });
+            hide(task.uid);
+          }
+        });
+      }
+      return tasks.filter(t => {
+        if (hidden.has(t.uid)) return false;
+        if (search && !t.name.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      });
+    }
+    // 'default': hierarchy order (visibleTasks already in WBS/outline order)
+    return visibleTasks;
+  }, [visibleTasks, sortBy, tasks, collapsed, search]);
 
   const uidToRow = useMemo(() => {
     const m = {}; sortedVisibleTasks.forEach((t, i) => { m[t.uid] = i; }); return m;
@@ -377,13 +398,18 @@ export default function Timeline({ project, fileName, onReset }) {
         </div>
 
         {/* Sort toggle */}
-        <button onClick={() => setSortBy(s => s === 'default' ? 'date' : 'default')}
-          className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-mono transition-colors ${sortBy === 'date' ? 'border-emerald-600 text-emerald-400 bg-emerald-500/10' : 'border-steel-700 text-steel-500'}`}>
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {sortBy === 'date' ? 'By Date' : 'By Order'}
-        </button>
+        <div className="flex bg-steel-900 rounded border border-steel-700 overflow-hidden shrink-0">
+          {[
+            { key: 'default', label: 'Outline' },
+            { key: 'original', label: 'XML' },
+            { key: 'date',     label: 'Date' },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setSortBy(key)}
+              className={`px-2.5 py-1.5 text-xs font-mono transition-colors border-r border-steel-700 last:border-r-0 ${sortBy === key ? 'bg-emerald-600 text-white' : 'text-steel-400 hover:text-steel-200'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
 
         {/* Links toggle */}
         <button onClick={() => setShowArrows(a => !a)}
