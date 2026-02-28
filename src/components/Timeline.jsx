@@ -7,6 +7,8 @@ const BAR_PADDING_V = 8;
 const ARROW_COLOR = '#627d98';
 const ARROW_HIGHLIGHT = '#38bdf8';
 
+const logoUrl = `${import.meta.env.BASE_URL}logo.png`;
+
 const GROUP_COLORS = [
   '#38bdf8', '#f472b6', '#34d399', '#a78bfa',
   '#fb923c', '#facc15', '#2dd4bf', '#60a5fa',
@@ -337,7 +339,8 @@ export default function Timeline({ project, fileName, onReset }) {
       {/* ── Header ── */}
       <header className="flex items-center gap-3 px-5 py-2.5 border-b border-steel-800 shrink-0 bg-steel-950">
         <div className="flex items-center gap-2 mr-3 shrink-0">
-          <img src="/logo.png" alt="spaceshiptrip" className="w-7 h-7 object-contain" />
+          <img src={logoUrl}   alt="spaceshiptrip" className="w-7 h-7 object-contain" />
+
           <span className="font-mono text-xs text-steel-500 tracking-widest uppercase">MS Project</span>
         </div>
         <div className="flex-1 min-w-0">
@@ -595,7 +598,8 @@ export default function Timeline({ project, fileName, onReset }) {
 
               {/* Watermark */}
               <div className="absolute bottom-6 right-6 pointer-events-none select-none flex items-center gap-2 opacity-[0.04] z-10">
-                <img src="/logo.png" alt="" className="w-10 h-10 object-contain" />
+                <img src={logoUrl}   alt="" className="w-10 h-10 object-contain" />
+
                 <span className="font-mono text-2xl font-bold text-white tracking-widest">spaceshiptrip</span>
               </div>
 
@@ -735,7 +739,8 @@ export default function Timeline({ project, fileName, onReset }) {
             {formatDate(project.projectStart)} → {formatDate(project.projectFinish)}
           </span>
           <div className="flex items-center gap-2 pl-4 border-l border-steel-800">
-            <img src="/logo.png" alt="spaceshiptrip" className="w-5 h-5 object-contain opacity-50" />
+            <img src={logoUrl}   alt="spaceshiptrip" className="w-5 h-5 object-contain opacity-50" />
+
             <a
               href="https://github.com/spaceshiptrip/msp-viewer"
               target="_blank"

@@ -4,6 +4,7 @@ export default function FileUpload({ onFileLoaded }) {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
+  const logoUrl = `${import.meta.env.BASE_URL}logo.png`;
 
   const handleFile = (file) => {
     setError('');
@@ -30,7 +31,8 @@ export default function FileUpload({ onFileLoaded }) {
     <div className="min-h-screen flex flex-col items-center justify-center p-8">
       {/* Header */}
       <div className="mb-10 text-center animate-fade-in-up">
-        <img src="/logo.png" alt="Spaceshiptrip logo" className="w-24 h-24 mx-auto mb-5 object-contain drop-shadow-lg" />
+        <img src={logoUrl} alt="Spaceshiptrip logo" className="w-24 h-24 mx-auto mb-5 object-contain drop-shadow-lg" />
+
         <h1 className="font-mono text-4xl font-semibold text-steel-50 leading-tight">
           Project<br />
           <span className="text-sky-400">Timeline</span>
@@ -93,7 +95,7 @@ export default function FileUpload({ onFileLoaded }) {
 
       {/* Footer */}
       <div className="mt-10 flex items-center gap-3 animate-fade-in-up" style={{ animationDelay: '0.3s', opacity: 0, animationFillMode: 'forwards' }}>
-        <img src="/logo.png" alt="logo" className="w-6 h-6 object-contain opacity-60" />
+        <img src={logoUrl}   alt="logo" className="w-6 h-6 object-contain opacity-60" />
         <a href="https://github.com/spaceshiptrip/msp-viewer" target="_blank" rel="noopener noreferrer"
           className="font-mono text-xs text-steel-600 hover:text-sky-400 transition-colors flex items-center gap-1.5">
           <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
