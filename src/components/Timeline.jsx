@@ -243,93 +243,101 @@ export default function Timeline({ project, fileName, onReset }) {
       .sort((a, b) => a.keyDate - b.keyDate);
   }, [sortedVisibleTasks, now]);
 
+  // ── Scroll sync ──────────────────────────────────────────────────────────
+  // Gantt is the master vertical scroller. Left panel mirrors it instantly.
+  // Simple equality check prevents feedback loops without needing a mutex.
+  const syncFromGantt = useCallback(() => {
+    const g = scrollRef.current;
+    const l = leftPanelRef.current;
+    if (!g || !l) return;
+    if (l.scrollTop !== g.scrollTop) l.scrollTop = g.scrollTop;
+  }, []);
+
+  const syncFromLeft = useCallback(() => {
+    const g = scrollRef.current;
+    const l = leftPanelRef.current;
+    if (!g || !l) return;
+    if (g.scrollTop !== l.scrollTop) g.scrollTop = l.scrollTop;
+  }, []);
+
+  // Scroll gantt to a position; left panel follows via syncFromGantt event.
+  // For instant (non-smooth) programmatic scrolls we also set left directly.
+  const scrollVerticalTo = useCallback((top) => {
+    const g = scrollRef.current;
+    const l = leftPanelRef.current;
+    if (!g) return;
+    g.scrollTop = top;          // instant — fires onScroll → syncFromGantt
+    if (l) l.scrollTop = top;   // belt-and-suspenders
+  }, []);
+
+  // ── Navigation helpers ────────────────────────────────────────────────────
   const scrollToEvent = useCallback((uid) => {
     const task = sortedVisibleTasks.find(t => t.uid === uid);
     if (!task) return;
     setHighlightedTask(uid);
     setTodayFocus(false);
 
-    // Vertical: scroll both panels to that row
+    // Vertical — instant so left panel stays in sync
     const row = uidToRow[uid];
     if (row !== undefined) {
-      const targetY = Math.max(0, row * ROW_HEIGHT - 120);
-      scrollRef.current?.scrollTo({ top: targetY, behavior: 'smooth' });
-      leftPanelRef.current?.scrollTo({ top: targetY, behavior: 'smooth' });
+      scrollVerticalTo(Math.max(0, row * ROW_HEIGHT - 120));
     }
 
-    // Horizontal: scroll gantt to show the key date of the task centered
-    if (scrollRef.current) {
-      const finishMs = task.finish ? new Date(task.finish).getTime() : null;
-      const startMs  = task.start  ? new Date(task.start).getTime()  : null;
-      const isDone = finishMs && finishMs < now;
-      const focusDate = isDone ? task.finish : (task.start || task.finish);
-      const focusX = getX(focusDate);
+    // Horizontal — smooth is fine, only the gantt scrolls horizontally
+    const finishMs = task.finish ? new Date(task.finish).getTime() : null;
+    const startMs  = task.start  ? new Date(task.start).getTime()  : null;
+    const isDone   = finishMs && finishMs < now;
+    const focusDate = isDone ? task.finish : (task.start || task.finish);
+    if (focusDate && scrollRef.current) {
+      const focusX    = getX(focusDate);
       const containerW = scrollRef.current.clientWidth;
       scrollRef.current.scrollTo({ left: Math.max(0, focusX - containerW / 2), behavior: 'smooth' });
     }
-  }, [sortedVisibleTasks, uidToRow, getX, now]);
+  }, [sortedVisibleTasks, uidToRow, getX, now, scrollVerticalTo]);
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     if (chronoEvents.length === 0) return;
-    let next;
-    if (navIndex === null) {
-      // Start from first event at or after today
-      const idx = chronoEvents.findIndex(e => e.keyDate >= now);
-      next = idx === -1 ? chronoEvents.length - 1 : idx;
-    } else {
-      next = Math.min(navIndex + 1, chronoEvents.length - 1);
-    }
+    const next = navIndex === null
+      ? (() => { const i = chronoEvents.findIndex(e => e.keyDate >= now); return i === -1 ? chronoEvents.length - 1 : i; })()
+      : Math.min(navIndex + 1, chronoEvents.length - 1);
     setNavIndex(next);
     scrollToEvent(chronoEvents[next].uid);
-  };
+  }, [chronoEvents, navIndex, now, scrollToEvent]);
 
-  const goToPrev = () => {
+  const goToPrev = useCallback(() => {
     if (chronoEvents.length === 0) return;
-    let prev;
-    if (navIndex === null) {
-      // Start from last event before today
-      const idx = chronoEvents.findLastIndex(e => e.keyDate < now);
-      prev = idx === -1 ? 0 : idx;
-    } else {
-      prev = Math.max(navIndex - 1, 0);
-    }
+    const prev = navIndex === null
+      ? (() => { const i = [...chronoEvents].reverse().findIndex(e => e.keyDate < now); return i === -1 ? 0 : chronoEvents.length - 1 - i; })()
+      : Math.max(navIndex - 1, 0);
     setNavIndex(prev);
     scrollToEvent(chronoEvents[prev].uid);
-  };
+  }, [chronoEvents, navIndex, now, scrollToEvent]);
 
-  const goToToday = () => {
+  const goToToday = useCallback(() => {
     setNavIndex(null);
     setHighlightedTask(null);
     setTodayFocus(true);
-    // Scroll gantt horizontally to center today
+
+    // Horizontal
     if (scrollRef.current) {
       const containerW = scrollRef.current.clientWidth;
-      const targetScrollX = Math.max(0, todayX - containerW / 2);
-      scrollRef.current.scrollTo({ left: targetScrollX, behavior: 'smooth' });
+      scrollRef.current.scrollTo({ left: Math.max(0, todayX - containerW / 2), behavior: 'smooth' });
     }
-    // Find the first near-today task row and scroll vertically to it
+    // Vertical — jump to first near-today task
     const firstRow = sortedVisibleTasks.findIndex(t => nearTodayUids.has(t.uid));
-    if (firstRow !== -1) {
-      const targetScrollY = Math.max(0, firstRow * ROW_HEIGHT - 80);
-      scrollRef.current?.scrollTo({ top: targetScrollY, behavior: 'smooth' });
-      leftPanelRef.current?.scrollTo({ top: targetScrollY, behavior: 'smooth' });
-    }
-    // Clear focus highlight after a few seconds
+    if (firstRow !== -1) scrollVerticalTo(Math.max(0, firstRow * ROW_HEIGHT - 80));
+
     setTimeout(() => setTodayFocus(false), 3000);
-  };
+  }, [todayX, sortedVisibleTasks, nearTodayUids, scrollVerticalTo]);
 
   const navEventUid = navIndex !== null && chronoEvents[navIndex] ? chronoEvents[navIndex].uid : null;
-
-  const syncScroll = (from, to) => {
-    if (to && to.scrollTop !== from.scrollTop) to.scrollTop = from.scrollTop;
-  };
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-steel-950">
       {/* ── Header ── */}
       <header className="flex items-center gap-3 px-5 py-2.5 border-b border-steel-800 shrink-0 bg-steel-950">
         <div className="flex items-center gap-2 mr-3 shrink-0">
-          <div className="w-5 h-5 bg-sky-400 rounded" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 70%, 70% 100%, 0 100%)' }} />
+          <img src="/logo.png" alt="spaceshiptrip" className="w-7 h-7 object-contain" />
           <span className="font-mono text-xs text-steel-500 tracking-widest uppercase">MS Project</span>
         </div>
         <div className="flex-1 min-w-0">
@@ -478,7 +486,7 @@ export default function Timeline({ project, fileName, onReset }) {
             ref={leftPanelRef}
             className="overflow-y-auto overflow-x-hidden flex-1"
             style={{ scrollbarWidth: 'none' }}
-            onScroll={e => syncScroll(e.target, scrollRef.current)}
+            onScroll={syncFromLeft}
           >
             {sortedVisibleTasks.map((task, idx) => {
               const indent = sortBy === 'default' ? (task.outlineLevel - 1) * 14 : 8;
@@ -535,7 +543,7 @@ export default function Timeline({ project, fileName, onReset }) {
         <div
           ref={scrollRef}
           className="flex-1 overflow-auto"
-          onScroll={e => syncScroll(e.target, leftPanelRef.current)}
+          onScroll={syncFromGantt}
         >
           <div style={{ width: Math.max(totalWidth + 60, 600), minHeight: '100%' }}>
 
@@ -583,6 +591,12 @@ export default function Timeline({ project, fileName, onReset }) {
                 {sortedVisibleTasks.map((_, i) => i % 2 === 0 ? (
                   <div key={i} className="absolute left-0 right-0 bg-white/[0.015]" style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }} />
                 ) : null)}
+              </div>
+
+              {/* Watermark */}
+              <div className="absolute bottom-6 right-6 pointer-events-none select-none flex items-center gap-2 opacity-[0.04] z-10">
+                <img src="/logo.png" alt="" className="w-10 h-10 object-contain" />
+                <span className="font-mono text-2xl font-bold text-white tracking-widest">spaceshiptrip</span>
               </div>
 
               {/* Today line */}
@@ -716,8 +730,25 @@ export default function Timeline({ project, fileName, onReset }) {
             <span className="flex items-center gap-1 font-mono text-xs text-violet-400"><span className="w-2 h-2 rounded-full bg-violet-400 inline-block"/>Upcoming</span>
           </div>
         )}
-        <div className="ml-auto font-mono text-xs text-steel-600">
-          {formatDate(project.projectStart)} → {formatDate(project.projectFinish)}
+        <div className="ml-auto flex items-center gap-4">
+          <span className="font-mono text-xs text-steel-600">
+            {formatDate(project.projectStart)} → {formatDate(project.projectFinish)}
+          </span>
+          <div className="flex items-center gap-2 pl-4 border-l border-steel-800">
+            <img src="/logo.png" alt="spaceshiptrip" className="w-5 h-5 object-contain opacity-50" />
+            <a
+              href="https://github.com/spaceshiptrip/msp-viewer"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs text-steel-600 hover:text-sky-400 transition-colors flex items-center gap-1"
+              title="github.com/spaceshiptrip/msp-viewer"
+            >
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+              </svg>
+              spaceshiptrip
+            </a>
+          </div>
         </div>
       </div>
 
